@@ -2,6 +2,8 @@ use std::{
     thread::{sleep, spawn},
     time::Duration
 };
+use state::State;
+use wgpu::SurfaceError;
 use winit::{
     event::{Event, WindowEvent},
     event_loop::EventLoopBuilder,
@@ -10,8 +12,9 @@ use winit::{
 use custom_event::CustomEvent;
 
 mod custom_event;
+mod state;
 
-pub fn run()
+pub async fn run()
 {
     env_logger::init();
 
@@ -30,15 +33,24 @@ pub fn run()
         event_loop_proxy.send_event(CustomEvent::Timer).ok();
     });
 
+    let mut state = State::new(&window).await;
+
     event_loop.run(move |event, elwt| match event {
         Event::UserEvent(..) => {
-
+            state.window.request_redraw();
         },
         Event::WindowEvent {
             window_id, event
-        } if window_id == window.id() => match event {
+        } if window_id == state.window.id() => match event {
             WindowEvent::CloseRequested => {
                 elwt.exit();
+            },
+            WindowEvent::Resized(physical_size) => state.resize(physical_size),
+            WindowEvent::RedrawRequested => match state.render() {
+                Ok(_) => {},
+                Err(SurfaceError::Lost) => state.resize(state.size),
+                Err(SurfaceError::OutOfMemory) => elwt.exit(),
+                Err(e) => eprintln!("{e:?}")
             },
             _ => {}
         }
