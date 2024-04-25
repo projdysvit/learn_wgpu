@@ -33,8 +33,19 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
+        cfg_if::cfg_if! {
+            if #[cfg(target_arch = "wasm32")] {
+                let shader_name = include_str!("./shaders/colorful_triangle.wgsl");
+            } else {
+                let shader_name = "colorful_triangle.wgsl";
+            }
+        }
+
         let render_pipeline = PipelineBuilder::builder()
-            .set_shader_module("colorful_triangle.wgsl", "vs_main", "fs_main")
+            .set_shader_module(
+                shader_name,
+                "vs_main",
+                "fs_main")
             .set_pixel_format(config.format)
             .build(&device);
 
@@ -125,7 +136,11 @@ impl<'a> State<'a> {
     {
         DeviceDescriptor {
             required_features: Features::empty(),
-            required_limits: Limits::default(),
+            required_limits: if cfg!(target_arch = "wasm32") {
+                Limits::downlevel_webgl2_defaults()
+            } else {
+                Limits::default()
+            },
             label: Some("Device")
         }
     }
