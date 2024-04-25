@@ -1,6 +1,11 @@
 use std::iter::once;
-use wgpu::{Adapter, Backends, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, Instance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RequestAdapterOptions, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
+use wgpu::{Adapter, Backends, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, Instance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
 use winit::{dpi::PhysicalSize, window::Window};
+
+use self::renderer_backend::pipeline_builder::PipelineBuilder;
+
+#[path ="renderer_backend/mod.rs"]
+mod renderer_backend;
 
 pub struct State<'a> {
     surface: Surface<'a>,
@@ -8,7 +13,8 @@ pub struct State<'a> {
     queue: Queue,
     config: SurfaceConfiguration,
     pub size: PhysicalSize<u32>,
-    pub window: &'a Window
+    pub window: &'a Window,
+    render_pipeline: RenderPipeline
 }
 
 impl<'a> State<'a> {
@@ -27,13 +33,19 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
+        let render_pipeline = PipelineBuilder::builder()
+            .set_shader_module("colorful_triangle.wgsl", "vs_main", "fs_main")
+            .set_pixel_format(config.format)
+            .build(&device);
+
         Self {
             surface,
             device,
             queue,
             config,
             size,
-            window
+            window,
+            render_pipeline
         }
     }
 
@@ -70,15 +82,20 @@ impl<'a> State<'a> {
             }
         };
 
-        command_encoder.begin_render_pass(
-            &RenderPassDescriptor {
-                label: Some("Render Pass"),
-                color_attachments: &[Some(color_attachment)],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None
-            }
-        );
+        {
+            let mut render_pass = command_encoder.begin_render_pass(
+                &RenderPassDescriptor {
+                    label: Some("Render Pass"),
+                    color_attachments: &[Some(color_attachment)],
+                    depth_stencil_attachment: None,
+                    occlusion_query_set: None,
+                    timestamp_writes: None
+                }
+            );
+            render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.draw(0..3, 0..1);
+        }
+        
         self.queue.submit(once(command_encoder.finish()));
 
         drawable.present();
