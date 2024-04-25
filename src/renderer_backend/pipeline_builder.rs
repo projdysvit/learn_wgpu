@@ -1,4 +1,4 @@
-use std::{env::current_dir, fs, path::PathBuf, str::FromStr};
+use std::{env::current_dir, fs, path::{Path, PathBuf}, str::FromStr};
 
 use wgpu::{BlendState, ColorTargetState, ColorWrites, Device, Face, FragmentState, FrontFace, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat, VertexState};
 
@@ -44,8 +44,8 @@ impl PipelineBuilder {
     pub fn build(&mut self, device: &Device) -> RenderPipeline
     {
         cfg_if::cfg_if! {
-            if #[cfg(target_arch = "wasm32")] { //FIXME: hardcode path to shader file
-                let source_code = include_str!("../shaders/colorful_triangle.wgsl");
+            if #[cfg(target_arch = "wasm32")] {
+                let source_code = self.shader_filename.as_str();
             } else {
                 let filepath = current_dir()
                     .unwrap()
