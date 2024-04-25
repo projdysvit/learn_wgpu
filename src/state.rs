@@ -125,7 +125,11 @@ impl<'a> State<'a> {
     {
         DeviceDescriptor {
             required_features: Features::empty(),
-            required_limits: Limits::default(),
+            required_limits: if cfg!(target_arch = "wasm32") {
+                Limits::downlevel_webgl2_defaults()
+            } else {
+                Limits::default()
+            },
             label: Some("Device")
         }
     }

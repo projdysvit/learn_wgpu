@@ -1,4 +1,4 @@
-use std::{env::current_dir, fs};
+use std::{env::current_dir, fs, path::PathBuf, str::FromStr};
 
 use wgpu::{BlendState, ColorTargetState, ColorWrites, Device, Face, FragmentState, FrontFace, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat, VertexState};
 
@@ -43,16 +43,23 @@ impl PipelineBuilder {
 
     pub fn build(&mut self, device: &Device) -> RenderPipeline
     {
-        let filepath = current_dir()
-            .unwrap()
-            .join("src")
-            .join("shaders")
-            .join(self.shader_filename.as_str())
-            .into_os_string()
-            .into_string()
-            .unwrap();
-        let source_code = fs::read_to_string(filepath)
-            .expect("Can't read the shader source file.");
+        cfg_if::cfg_if! {
+            if #[cfg(target_arch = "wasm32")] { //FIXME: hardcode path to shader file
+                let source_code = include_str!("../shaders/colorful_triangle.wgsl");
+            } else {
+                let filepath = current_dir()
+                    .unwrap()
+                    .join("src")
+                    .join("shaders")
+                    .join(self.shader_filename.as_str())
+                    .into_os_string()
+                    .into_string()
+                    .unwrap();
+
+                let source_code = fs::read_to_string(filepath)
+                    .expect("Can't read the shader source file.");
+            }
+        }
 
         let shader_module = device.create_shader_module(
             ShaderModuleDescriptor {
@@ -75,7 +82,7 @@ impl PipelineBuilder {
                 vertex: VertexState {
                     module: &shader_module,
                     entry_point: &self.vertex_entry,
-                    buffers: &[],
+                    buffers: &[]
                 },
                 primitive: PrimitiveState {
                     topology: PrimitiveTopology::TriangleList,
@@ -84,20 +91,20 @@ impl PipelineBuilder {
                     cull_mode: Some(Face::Back),
                     polygon_mode: PolygonMode::Fill,
                     unclipped_depth: false,
-                    conservative: false,
+                    conservative: false
                 },
                 fragment: Some(FragmentState {
                     module: &shader_module,
                     entry_point: &self.fragment_entry,
-                    targets: &self.get_render_targets(),
+                    targets: &self.get_render_targets()
                 }),
                 depth_stencil: None,
                 multisample: MultisampleState {
                     count: 1,
                     mask: !0,
-                    alpha_to_coverage_enabled: false,
+                    alpha_to_coverage_enabled: false
                 },
-                multiview: None,
+                multiview: None
             }
         )
     }
