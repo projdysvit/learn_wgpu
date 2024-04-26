@@ -2,6 +2,8 @@ use std::{env::current_dir, fs};
 
 use wgpu::{BlendState, ColorTargetState, ColorWrites, Device, Face, FragmentState, FrontFace, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat, VertexState};
 
+use crate::state::renderer_backend::vertex::Vertex;
+
 pub struct PipelineBuilder {
     shader_filename: String,
     vertex_entry: String,
@@ -82,7 +84,9 @@ impl PipelineBuilder {
                 vertex: VertexState {
                     module: &shader_module,
                     entry_point: &self.vertex_entry,
-                    buffers: &[]
+                    buffers: &[
+                        Vertex::get_vertex_buffer_layout()
+                    ]
                 },
                 primitive: PrimitiveState {
                     topology: PrimitiveTopology::TriangleList,
