@@ -1,11 +1,25 @@
 use std::iter::once;
-use wgpu::{Adapter, Backends, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, Instance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
+use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Adapter, Backends, Buffer, BufferUsages, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, IndexFormat, Instance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
 use winit::{dpi::PhysicalSize, window::Window};
 
-use self::renderer_backend::pipeline_builder::PipelineBuilder;
+use self::renderer_backend::{pipeline_builder::PipelineBuilder, vertex::Vertex};
 
 #[path ="renderer_backend/mod.rs"]
 mod renderer_backend;
+
+const VERTICES: &[Vertex] = &[
+    Vertex { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.5] }, // A
+    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] }, // B
+    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.5, 0.0, 0.5] }, // C
+    Vertex { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.0, 0.5] }, // D
+    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [0.5, 0.0, 0.5] } // E
+];
+
+const INDICES: &[u16] = &[
+    0, 1, 4,
+    1, 2, 4,
+    2, 3, 4
+];
 
 pub struct State<'a> {
     surface: Surface<'a>,
@@ -14,7 +28,10 @@ pub struct State<'a> {
     config: SurfaceConfiguration,
     pub size: PhysicalSize<u32>,
     pub window: &'a Window,
-    render_pipeline: RenderPipeline
+    render_pipeline: RenderPipeline,
+    vertex_buffer: Buffer,
+    index_buffer: Buffer,
+    num_indices: u32
 }
 
 impl<'a> State<'a> {
@@ -35,19 +52,18 @@ impl<'a> State<'a> {
 
         cfg_if::cfg_if! {
             if #[cfg(target_arch = "wasm32")] {
-                let shader_name = include_str!("./shaders/colorful_triangle.wgsl");
+                let shader_name = include_str!("./shaders/vertex.wgsl");
             } else {
-                let shader_name = "colorful_triangle.wgsl";
+                let shader_name = "vertex.wgsl";
             }
         }
 
         let render_pipeline = PipelineBuilder::builder()
-            .set_shader_module(
-                shader_name,
-                "vs_main",
-                "fs_main")
+            .set_shader_module(shader_name, "vs_main", "fs_main")
             .set_pixel_format(config.format)
             .build(&device);
+
+        let (vertex_buffer, index_buffer, num_indices) = Self::create_buffers(&device);
 
         Self {
             surface,
@@ -56,7 +72,10 @@ impl<'a> State<'a> {
             config,
             size,
             window,
-            render_pipeline
+            render_pipeline,
+            vertex_buffer,
+            index_buffer,
+            num_indices
         }
     }
 
@@ -104,7 +123,9 @@ impl<'a> State<'a> {
                 }
             );
             render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.draw(0..3, 0..1);
+            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
         
         self.queue.submit(once(command_encoder.finish()));
@@ -168,6 +189,27 @@ impl<'a> State<'a> {
             view_formats: vec![],
             desired_maximum_frame_latency: 2
         }
+    }
+
+    fn create_buffers(device: &Device) -> (Buffer, Buffer, u32)
+    {
+        let vertex_buffer = device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(VERTICES),
+                usage: BufferUsages::VERTEX
+            }
+        );
+        let index_buffer = device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(INDICES),
+                usage: BufferUsages::INDEX
+            }
+        );
+        let num_indices = INDICES.len() as u32;
+
+        (vertex_buffer, index_buffer, num_indices)
     }
 
     // render function

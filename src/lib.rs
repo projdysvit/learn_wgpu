@@ -34,12 +34,10 @@ pub async fn run()
 
     cfg_if::cfg_if! {
         if #[cfg(target_arch = "wasm32")] {
-            use winit::dpi::PhysicalSize;
             use winit::platform::web::WindowBuilderExtWebSys;
             use winit::platform::web::WindowExtWebSys;
 
             let window = WindowBuilder::new()
-                .with_inner_size(PhysicalSize::new(450, 400))
                 .with_canvas(None)
                 .build(&event_loop)
                 .unwrap();
