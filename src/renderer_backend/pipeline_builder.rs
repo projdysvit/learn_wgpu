@@ -1,6 +1,6 @@
 use std::{env::current_dir, fs};
 
-use wgpu::{BlendState, ColorTargetState, ColorWrites, Device, Face, FragmentState, FrontFace, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat, VertexState};
+use wgpu::{BindGroupLayout, BlendState, ColorTargetState, ColorWrites, Device, Face, FragmentState, FrontFace, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat, VertexState};
 
 use crate::state::renderer_backend::vertex::Vertex;
 
@@ -43,7 +43,11 @@ impl PipelineBuilder {
         self
     }
 
-    pub fn build(&mut self, device: &Device) -> RenderPipeline
+    pub fn build(
+        &mut self,
+        device: &Device,
+        bind_group_layouts: &[&BindGroupLayout]
+    ) -> RenderPipeline
     {
         cfg_if::cfg_if! {
             if #[cfg(target_arch = "wasm32")] {
@@ -72,7 +76,7 @@ impl PipelineBuilder {
         let render_pipeline_layout = device.create_pipeline_layout(
             &PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: bind_group_layouts,
                 push_constant_ranges: &[]
             }
         );
