@@ -1,18 +1,36 @@
 use std::iter::once;
-use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Adapter, Backends, Buffer, BufferUsages, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, IndexFormat, Instance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
+use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Adapter, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, Buffer, BufferUsages, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, IndexFormat, Instance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
 use winit::{dpi::PhysicalSize, window::Window};
+
+use crate::state::renderer_backend::texture::Texture;
 
 use self::renderer_backend::{pipeline_builder::PipelineBuilder, vertex::Vertex};
 
 #[path ="renderer_backend/mod.rs"]
 mod renderer_backend;
 
+
 const VERTICES: &[Vertex] = &[
-    Vertex { position: [-0.0868241, 0.49240386, 0.0], color: [0.5, 0.0, 0.5] }, // A
-    Vertex { position: [-0.49513406, 0.06958647, 0.0], color: [0.5, 0.0, 0.5] }, // B
-    Vertex { position: [-0.21918549, -0.44939706, 0.0], color: [0.5, 0.0, 0.5] }, // C
-    Vertex { position: [0.35966998, -0.3473291, 0.0], color: [0.5, 0.0, 0.5] }, // D
-    Vertex { position: [0.44147372, 0.2347359, 0.0], color: [0.5, 0.0, 0.5] } // E
+    Vertex {
+        position: [-0.0868241, 0.49240386, 0.0],
+        tex_coords: [0.4, 0.09]
+    }, // A
+    Vertex {
+        position: [-0.49513406, 0.06958647, 0.0],
+        tex_coords: [0.11, 0.4]
+    }, // B
+    Vertex {
+        position: [-0.21918549, -0.44939706, 0.0],
+        tex_coords: [0.3, 0.7]
+    }, // C
+    Vertex {
+        position: [0.35966998, -0.3473291, 0.0],
+        tex_coords: [0.85, 0.85]
+    }, // D
+    Vertex {
+        position: [0.44147372, 0.2347359, 0.0],
+        tex_coords: [0.85, 0.45]
+    } // E
 ];
 
 const INDICES: &[u16] = &[
@@ -31,7 +49,9 @@ pub struct State<'a> {
     render_pipeline: RenderPipeline,
     vertex_buffer: Buffer,
     index_buffer: Buffer,
-    num_indices: u32
+    num_indices: u32,
+    diffuse_texture: Texture,
+    diffuse_bind_group: BindGroup
 }
 
 impl<'a> State<'a> {
@@ -50,6 +70,27 @@ impl<'a> State<'a> {
 
         surface.configure(&device, &config);
 
+        let diffuse_bytes = include_bytes!("../res/crycat.jpg");
+        let diffuse_texture = Texture::from_bytes(&device, &queue, diffuse_bytes, "Cry Cat")
+            .unwrap();
+        let texture_bind_group_layout = Texture::get_texture_bind_group_layout(&device);
+        let diffuse_bind_group = device.create_bind_group(
+            &BindGroupDescriptor {
+                label: Some("Diffuse Bind Group"),
+                layout: &texture_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: BindingResource::TextureView(&diffuse_texture.view)
+                    },
+                    BindGroupEntry {
+                        binding: 1,
+                        resource: BindingResource::Sampler(&diffuse_texture.sampler)
+                    }
+                ]
+            }
+        );
+
         cfg_if::cfg_if! {
             if #[cfg(target_arch = "wasm32")] {
                 let shader_name = include_str!("./shaders/vertex.wgsl");
@@ -61,7 +102,7 @@ impl<'a> State<'a> {
         let render_pipeline = PipelineBuilder::builder()
             .set_shader_module(shader_name, "vs_main", "fs_main")
             .set_pixel_format(config.format)
-            .build(&device);
+            .build(&device, &[&texture_bind_group_layout]);
 
         let (vertex_buffer, index_buffer, num_indices) = Self::create_buffers(&device);
 
@@ -75,7 +116,9 @@ impl<'a> State<'a> {
             render_pipeline,
             vertex_buffer,
             index_buffer,
-            num_indices
+            num_indices,
+            diffuse_texture,
+            diffuse_bind_group
         }
     }
 
@@ -123,6 +166,7 @@ impl<'a> State<'a> {
                 }
             );
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);

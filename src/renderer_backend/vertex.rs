@@ -5,7 +5,7 @@ use wgpu::{BufferAddress, VertexAttribute, VertexBufferLayout, VertexFormat, Ver
 #[derive(Debug, Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
     pub position: [f32; 3],
-    pub color: [f32; 3]
+    pub tex_coords: [f32; 2]
 }
 
 impl Vertex {
@@ -23,7 +23,7 @@ impl Vertex {
                 VertexAttribute {
                     offset: size_of::<[f32; 3]>() as BufferAddress,
                     shader_location: 1,
-                    format: VertexFormat::Float32x3
+                    format: VertexFormat::Float32x2
                 }
             ]
         }
