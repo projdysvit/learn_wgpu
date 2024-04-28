@@ -1,14 +1,16 @@
 use std::iter::once;
-use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Adapter, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindingResource, Buffer, BufferUsages, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, IndexFormat, Instance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
+use cgmath::Vector3;
+use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Adapter, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferBindingType, BufferUsages, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, IndexFormat, Instance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, ShaderStages, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::state::renderer_backend::texture::Texture;
+use crate::state::{camera::CameraUniform, renderer_backend::texture::Texture};
 
-use self::renderer_backend::{pipeline_builder::PipelineBuilder, vertex::Vertex};
+use self::{camera::Camera, renderer_backend::{pipeline_builder::PipelineBuilder, vertex::Vertex}};
 
 #[path ="renderer_backend/mod.rs"]
 mod renderer_backend;
-
+#[path ="camera.rs"]
+mod camera;
 
 const VERTICES: &[Vertex] = &[
     Vertex {
@@ -51,7 +53,11 @@ pub struct State<'a> {
     index_buffer: Buffer,
     num_indices: u32,
     diffuse_texture: Texture,
-    diffuse_bind_group: BindGroup
+    diffuse_bind_group: BindGroup,
+    camera: Camera,
+    camera_uniform: CameraUniform,
+    camera_buffer: Buffer,
+    camera_bind_group: BindGroup
 }
 
 impl<'a> State<'a> {
@@ -99,10 +105,62 @@ impl<'a> State<'a> {
             }
         }
 
+        let camera = Camera {
+            eye: (0.0, 1.0, 2.0).into(),
+            target: (0.0, 0.0, 0.0).into(),
+            up: Vector3::unit_y(),
+            aspect: config.width as f32 / config.height as f32,
+            fovy: 45.0,
+            znear: 0.1,
+            zfar: 100.0
+        };
+
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_view_proj(&camera);
+
+        let camera_buffer = device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: Some("Camera Buffer"),
+                contents: bytemuck::cast_slice(&[camera_uniform]),
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST
+            }
+        );
+
+        let camera_bind_group_layout = device.create_bind_group_layout(
+            &BindGroupLayoutDescriptor {
+                label: Some("Camera Bind Group Layout"),
+                entries: &[
+                    BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: ShaderStages::VERTEX,
+                        ty: BindingType::Buffer {
+                            ty: BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None
+                        },
+                        count: None
+                    }
+                ]
+            }
+        );
+
+        let camera_bind_group = device.create_bind_group(
+            &BindGroupDescriptor {
+                label: Some("Camera Bind Group"),
+                layout: &camera_bind_group_layout,
+                entries: &[
+                    BindGroupEntry {
+                        binding: 0,
+                        resource: camera_buffer.as_entire_binding()
+                    }
+                ]
+            }
+        );
+
         let render_pipeline = PipelineBuilder::builder()
             .set_shader_module(shader_name, "vs_main", "fs_main")
             .set_pixel_format(config.format)
-            .build(&device, &[&texture_bind_group_layout]);
+            .build(&device, &[&texture_bind_group_layout, &camera_bind_group_layout]);
 
         let (vertex_buffer, index_buffer, num_indices) = Self::create_buffers(&device);
 
@@ -118,7 +176,11 @@ impl<'a> State<'a> {
             index_buffer,
             num_indices,
             diffuse_texture,
-            diffuse_bind_group
+            diffuse_bind_group,
+            camera,
+            camera_uniform,
+            camera_buffer,
+            camera_bind_group
         }
     }
 
@@ -167,6 +229,7 @@ impl<'a> State<'a> {
             );
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
+            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
