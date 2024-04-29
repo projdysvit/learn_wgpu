@@ -71,20 +71,27 @@ pub async fn run()
             state.window.request_redraw();
         },
         Event::WindowEvent {
-            window_id, event
-        } if window_id == state.window.id() => match event {
-            WindowEvent::CloseRequested => {
-                elwt.exit();
-            },
-            WindowEvent::Resized(physical_size) => state.resize(physical_size),
-            WindowEvent::RedrawRequested => match state.render() {
-                Ok(_) => {},
-                Err(SurfaceError::Lost) => state.resize(state.size),
-                Err(SurfaceError::OutOfMemory) => elwt.exit(),
-                Err(e) => eprintln!("{e:?}")
-            },
-            _ => {}
-        }
+            window_id, ref event
+        } if window_id == state.window.id() => {
+            if !state.input(event) {
+                match event {
+                    WindowEvent::CloseRequested => {
+                        elwt.exit();
+                    },
+                    WindowEvent::Resized(physical_size) => state.resize(*physical_size),
+                    WindowEvent::RedrawRequested => {
+                        state.update();
+                        match state.render() {
+                            Ok(_) => {},
+                            Err(SurfaceError::Lost) => state.resize(state.size),
+                            Err(SurfaceError::OutOfMemory) => elwt.exit(),
+                            Err(e) => eprintln!("{e:?}")
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        },
         _ => {}
     }).expect("Error!");
 }
