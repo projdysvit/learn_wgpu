@@ -1,11 +1,12 @@
 use std::iter::once;
+use bytemuck::cast_slice;
 use cgmath::Vector3;
 use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Adapter, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferBindingType, BufferUsages, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, IndexFormat, Instance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, ShaderStages, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
-use winit::{dpi::PhysicalSize, window::Window};
+use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
 
 use crate::state::{camera::CameraUniform, renderer_backend::texture::Texture};
 
-use self::{camera::Camera, renderer_backend::{pipeline_builder::PipelineBuilder, vertex::Vertex}};
+use self::{camera::{Camera, CameraController}, renderer_backend::{pipeline_builder::PipelineBuilder, vertex::Vertex}};
 
 #[path ="renderer_backend/mod.rs"]
 mod renderer_backend;
@@ -55,6 +56,7 @@ pub struct State<'a> {
     diffuse_texture: Texture,
     diffuse_bind_group: BindGroup,
     camera: Camera,
+    camera_controller: CameraController,
     camera_uniform: CameraUniform,
     camera_buffer: Buffer,
     camera_bind_group: BindGroup
@@ -114,6 +116,8 @@ impl<'a> State<'a> {
             znear: 0.1,
             zfar: 100.0
         };
+
+        let camera_controller = CameraController::new(0.2);
 
         let mut camera_uniform = CameraUniform::new();
         camera_uniform.update_view_proj(&camera);
@@ -178,6 +182,7 @@ impl<'a> State<'a> {
             diffuse_texture,
             diffuse_bind_group,
             camera,
+            camera_controller,
             camera_uniform,
             camera_buffer,
             camera_bind_group
@@ -240,6 +245,18 @@ impl<'a> State<'a> {
         drawable.present();
 
         Ok(())
+    }
+
+    pub fn input(&mut self, event: &WindowEvent) -> bool
+    {
+        self.camera_controller.process_events(event)
+    }
+
+    pub fn update(&mut self)
+    {
+        self.camera_controller.update_camera(&mut self.camera);
+        self.camera_uniform.update_view_proj(&self.camera);
+        self.queue.write_buffer(&self.camera_buffer, 0, cast_slice(&[self.camera_uniform]));
     }
 
     // new function
