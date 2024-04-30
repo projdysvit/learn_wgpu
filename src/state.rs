@@ -1,17 +1,20 @@
 use std::iter::once;
 use bytemuck::cast_slice;
-use cgmath::Vector3;
-use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Adapter, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferBindingType, BufferUsages, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, IndexFormat, Instance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, ShaderStages, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
+
+use cgmath::{prelude::*, Deg, Quaternion, Vector3};
+use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Adapter, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferBindingType, BufferUsages, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, IndexFormat, Instance as WgpuInstance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, ShaderStages, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
 use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
 
 use crate::state::{camera::CameraUniform, renderer_backend::texture::Texture};
 
-use self::{camera::{Camera, CameraController}, renderer_backend::{pipeline_builder::PipelineBuilder, vertex::Vertex}};
+use self::{camera::{Camera, CameraController}, renderer_backend::{pipeline_builder::PipelineBuilder, vertex::Vertex}, instance::Instance};
 
 #[path ="renderer_backend/mod.rs"]
 mod renderer_backend;
 #[path ="camera.rs"]
 mod camera;
+#[path ="instance.rs"]
+mod instance;
 
 const VERTICES: &[Vertex] = &[
     Vertex {
@@ -42,6 +45,10 @@ const INDICES: &[u16] = &[
     2, 3, 4
 ];
 
+const NUM_INSTANCES_PER_ROW: u32 = 10;
+const INSTANCE_DISPLACEMENT: Vector3<f32> = Vector3::new(
+    NUM_INSTANCES_PER_ROW as f32 * 0.5, 0.0, NUM_INSTANCES_PER_ROW as f32 * 0.5);
+
 pub struct State<'a> {
     surface: Surface<'a>,
     device: Device,
@@ -59,14 +66,16 @@ pub struct State<'a> {
     camera_controller: CameraController,
     camera_uniform: CameraUniform,
     camera_buffer: Buffer,
-    camera_bind_group: BindGroup
+    camera_bind_group: BindGroup,
+    instances: Vec<Instance>,
+    instance_buffer: Buffer
 }
 
 impl<'a> State<'a> {
     pub async fn new(window: &'a Window) -> Self
     {
         let size = window.inner_size();
-        let instance = Instance::new(Self::get_instance_descriptor());
+        let instance = WgpuInstance::new(Self::get_instance_descriptor());
         let surface = instance.create_surface(window).unwrap();
         let adapter = instance.request_adapter(&Self::get_adapter_descriptor(&surface))
             .await
@@ -168,6 +177,32 @@ impl<'a> State<'a> {
 
         let (vertex_buffer, index_buffer, num_indices) = Self::create_buffers(&device);
 
+        let instances = (0..NUM_INSTANCES_PER_ROW).flat_map(|z| {
+            (0..NUM_INSTANCES_PER_ROW).map(move |x| {
+                let position = Vector3 { x: x as f32, y: 0.0, z: z as f32 } - INSTANCE_DISPLACEMENT;
+
+                let rotation = if position.is_zero() {
+                    Quaternion::from_axis_angle(Vector3::unit_z(), Deg(0.0))
+                } else {
+                    Quaternion::from_axis_angle(position.normalize(), Deg(45.0))
+                };
+
+                Instance {
+                    position,
+                    rotation
+                }
+            })
+        }).collect::<Vec<_>>();
+        let instance_data = instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
+        let instance_buffer = device.create_buffer_init(
+            &BufferInitDescriptor {
+                label: Some("Instance Buffer"),
+                contents: bytemuck::cast_slice(&instance_data),
+                usage: wgpu::BufferUsages::VERTEX
+            }
+        );
+
+
         Self {
             surface,
             device,
@@ -185,7 +220,9 @@ impl<'a> State<'a> {
             camera_controller,
             camera_uniform,
             camera_buffer,
-            camera_bind_group
+            camera_bind_group,
+            instances,
+            instance_buffer
         }
     }
 
@@ -236,8 +273,9 @@ impl<'a> State<'a> {
             render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
         }
         
         self.queue.submit(once(command_encoder.finish()));
