@@ -2,7 +2,7 @@ use std::{env::current_dir, fs};
 
 use wgpu::{BindGroupLayout, BlendState, ColorTargetState, ColorWrites, Device, Face, FragmentState, FrontFace, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat, VertexState};
 
-use crate::state::renderer_backend::vertex::Vertex;
+use crate::state::{instance::InstanceRaw, renderer_backend::vertex::Vertex};
 
 pub struct PipelineBuilder {
     shader_filename: String,
@@ -89,7 +89,8 @@ impl PipelineBuilder {
                     module: &shader_module,
                     entry_point: &self.vertex_entry,
                     buffers: &[
-                        Vertex::get_vertex_buffer_layout()
+                        Vertex::get_vertex_buffer_layout(),
+                        InstanceRaw::get_vertex_buffer_layout()
                     ]
                 },
                 primitive: PrimitiveState {
