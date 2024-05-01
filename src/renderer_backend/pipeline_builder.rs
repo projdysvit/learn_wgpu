@@ -1,8 +1,8 @@
 use std::{env::current_dir, fs};
 
-use wgpu::{BindGroupLayout, BlendState, ColorTargetState, ColorWrites, Device, Face, FragmentState, FrontFace, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, TextureFormat, VertexState};
+use wgpu::{BindGroupLayout, BlendState, ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Device, Face, FragmentState, FrontFace, MultisampleState, PipelineLayoutDescriptor, PolygonMode, PrimitiveState, PrimitiveTopology, RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderSource, StencilState, TextureFormat, VertexState};
 
-use crate::state::{instance::InstanceRaw, renderer_backend::vertex::Vertex};
+use crate::state::{instance::InstanceRaw, renderer_backend::{texture::Texture, vertex::Vertex}};
 
 pub struct PipelineBuilder {
     shader_filename: String,
@@ -107,7 +107,15 @@ impl PipelineBuilder {
                     entry_point: &self.fragment_entry,
                     targets: &self.get_render_targets()
                 }),
-                depth_stencil: None,
+                depth_stencil: Some(
+                    DepthStencilState {
+                        format: Texture::DEPTH_FORMAT,
+                        depth_write_enabled: true,
+                        depth_compare: CompareFunction::Less,
+                        stencil: StencilState::default(),
+                        bias: DepthBiasState::default()
+                    }
+                ),
                 multisample: MultisampleState {
                     count: 1,
                     mask: !0,

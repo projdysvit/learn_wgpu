@@ -2,7 +2,7 @@ use std::iter::once;
 use bytemuck::cast_slice;
 
 use cgmath::{prelude::*, Deg, Quaternion, Vector3};
-use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Adapter, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferBindingType, BufferUsages, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, IndexFormat, Instance as WgpuInstance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, ShaderStages, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
+use wgpu::{util::{BufferInitDescriptor, DeviceExt}, Adapter, Backends, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource, BindingType, Buffer, BufferBindingType, BufferUsages, Color, CommandEncoderDescriptor, Device, DeviceDescriptor, Features, IndexFormat, Instance as WgpuInstance, InstanceDescriptor, Limits, LoadOp, Operations, PowerPreference, Queue, RenderPassColorAttachment, RenderPassDepthStencilAttachment, RenderPassDescriptor, RenderPipeline, RequestAdapterOptions, ShaderStages, StoreOp, Surface, SurfaceConfiguration, SurfaceError, TextureUsages, TextureViewDescriptor};
 use winit::{dpi::PhysicalSize, event::WindowEvent, window::Window};
 
 use crate::state::{camera::CameraUniform, renderer_backend::texture::Texture};
@@ -68,7 +68,8 @@ pub struct State<'a> {
     camera_buffer: Buffer,
     camera_bind_group: BindGroup,
     instances: Vec<Instance>,
-    instance_buffer: Buffer
+    instance_buffer: Buffer,
+    depth_texture: Texture
 }
 
 impl<'a> State<'a> {
@@ -202,6 +203,7 @@ impl<'a> State<'a> {
             }
         );
 
+        let depth_texture = Texture::create_depth_texture(&device, &config, "Depth Texture");
 
         Self {
             surface,
@@ -222,7 +224,8 @@ impl<'a> State<'a> {
             camera_buffer,
             camera_bind_group,
             instances,
-            instance_buffer
+            instance_buffer,
+            depth_texture
         }
     }
 
@@ -233,6 +236,8 @@ impl<'a> State<'a> {
         self.size = new_size;
         self.config.width = new_size.width;
         self.config.height = new_size.height;
+        self.depth_texture = Texture::create_depth_texture(&self.device, &self.config,
+            "Depth Texture");
         self.surface.configure(&self.device, &self.config);
     }
 
@@ -264,7 +269,18 @@ impl<'a> State<'a> {
                 &RenderPassDescriptor {
                     label: Some("Render Pass"),
                     color_attachments: &[Some(color_attachment)],
-                    depth_stencil_attachment: None,
+                    depth_stencil_attachment: Some(
+                        RenderPassDepthStencilAttachment {
+                            view: &self.depth_texture.view,
+                            depth_ops: Some(
+                                Operations {
+                                    load: LoadOp::Clear(1.0),
+                                    store: StoreOp::Store
+                                }
+                            ),
+                            stencil_ops: None
+                        }
+                    ),
                     occlusion_query_set: None,
                     timestamp_writes: None
                 }
